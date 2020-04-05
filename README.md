@@ -58,7 +58,7 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
 - Create VBox DHCP server (run on host): `VBoxManage dhcpserver add --netname intnet --ip 10.13.13.100 --netmask 255.255.255.0 --lowerip 10.13.13.101 --upperip 10.13.13.254 --enable`.
 - Clone `master` with linked option (which will use snapshots to save host disk space). Let's call them `node-0`, `node-1`, `node-2`. VM names like `Ubuntu20-node-N`, hostnames `vmubuntu20-node-N`.
 - On each of nodes modify port forward from different port 992N --> ssh (to allow SSH access from host). `node-0`: 9923->22, `node-1`: 9924->22, `node-2`: 9925->22.
-- Stop all machines from VirtualBox GUI and then start all of them in headless mode (righ click, start -> start in headless mode).
+- Stop all machines from VirtualBox GUI and then start all of them in headless mode (right click, Start -> Headless Start).
 - Shell to master and nodes from host via: `ssh -p 992N root@localhost`, replace N=2 for master and then N=3, 4, 5 for nodes.
 - On each (N=0, 1, 2):
   - `hostnamectl set-hostname vmubuntu20-node-N`.
@@ -79,5 +79,28 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   10.13.13.103 vmubuntu20-node-1
   10.13.13.104 vmubuntu20-node-2
   ```
-  - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.100`.
-
+  - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.101`.
+  - Run on master:
+  ```
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+  ```
+  - Save kubeadm join command output to `join.sh` on master and all nodes, something like then `chmod +x join.sh`:
+  ```
+  #!/bin/bash
+  kubeadm join 10.13.13.0:1234 --token xxxxxx.yyyyyyyyyyyy --discovery-token-ca-cert-hash sha256:0123456789abcdef0
+  ```
+  - On master: `wget https://docs.projectcalico.org/manifests/calico.yaml; kubectl -f calico.yaml`.
+  - On master: `kubectl taint nodes --all node-role.kubernetes.io/master-`.
+  - On master: `kubectl get po -A; kubectl get nodes`.
+  - On all nodes: `./join.sh`.
+  - Copy config from master to all nodes:
+    - `sftp root@vmubuntu20-node-N`.
+    ```
+    mkdir .kube
+    lcd .kube
+    cd .kube
+    mput config
+    ```
+    - `echo 'alias k=kubectl' >> ~/.bashrc`.
