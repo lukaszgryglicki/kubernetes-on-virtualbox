@@ -54,7 +54,8 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   - `sudo apt-mark hold kubelet kubeadm kubectl`.
   - `systemctl daemon-reload; systemctl restart kubelet`.
   - `hostnamectl set-hostname vmubuntu20-master`.
-  -  `shutdown -h now`.
+  - `apt install -y nfs-common`.
+  - `shutdown -h now`.
 - Create VBox DHCP server (run on host): `VBoxManage dhcpserver add --netname intnet --ip 10.13.13.100 --netmask 255.255.255.0 --lowerip 10.13.13.101 --upperip 10.13.13.254 --enable`.
 - Clone `master` with linked option (which will use snapshots to save host disk space). Let's call them `node-0`, `node-1`, `node-2`. VM names like `Ubuntu20-node-N`, hostnames `vmubuntu20-node-N`.
 - On each of nodes modify port forward from different port 992N --> ssh (to allow SSH access from host). `node-0`: 9923->22, `node-1`: 9924->22, `node-2`: 9925->22.
@@ -108,3 +109,34 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
 
 You have 4-node up-to-date Kubernetes cluster running on 4 VirtualBox VMs.
 
+# DevStats
+
+Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
+
+- Label nodes: `for node in vmubuntu20-master vmubuntu20-node-0 vmubuntu20-node-1 vmubuntu20-node-2; do k label node $node node=devstats-app; k label node $node node2=devstats-db; done`.
+- Install Helm: `wget https://get.helm.sh/helm-v3.1.2-linux-amd64.tar.gz; tar zxvf helm-v3.1.2-linux-amd64.tar.gz; mv linux-amd64/helm /usr/local/bin; rm -rf linux-amd64/ helm-v3.1.2-linux-amd64.tar.gz`.
+- Add Helm charts repository: `helm repo add stable https://kubernetes-charts.storage.googleapis.com/`.
+- Install OpenEBS: `k create ns openebs; helm install --namespace openebs openebs stable/openebs --version 1.8.0; helm ls -n openebs`.
+- Configure default storage class (need to wait for all OpenEBS pods to be running `k get po -n openebs -w`): `k patch storageclass openebs-hostpath -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'`.
+- Install NFS provisioner (for shared NFS volumes access): `helm install local-storage-nfs stable/nfs-server-provisioner --set=persistence.enabled=true,persistence.storageClass=openebs-hostpath,persistence.size=40Gi,storageClass.name=nfs-openebs-localstorage`.
+- Create DevStats test and prod namespaces: `k create ns devstats-test; k create ns devstats-prod`.
+- Edit `/root/.kube/config` on all nodes and master, make sure you have under contexts:
+```
+- context:
+    cluster: kubernetes
+    namespace: devstats-prod
+    user: kubernetes-admin
+  name: prod
+- context:
+    cluster: kubernetes
+    namespace: devstats-test
+    user: kubernetes-admin
+  name: test
+- context:
+    cluster: kubernetes
+    namespace: default
+    user: kubernetes-admin
+  name: shared
+```
+- Switch to `prod` context: `kubectl config use-context prod`.
+- TODO: skipping `nginx-ingress`, `metallb` and `cert-manager`. because my Mac doesn't have DNS name configured for its static IP address.
