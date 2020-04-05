@@ -14,7 +14,8 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   - Enable root login `vim /etc/ssh/sshd_config` add line `PermitRootLogin yes`, then `sudo service sshd restart`.
   - Login as root.
   - Run: `apt update && apt upgrade`.
-  - Kuberentes needs this: `swapoff -a`, `lsmod | grep br_netfilter`.
+  - Kuberentes needs this: `swapoff -a`, `vim /etc/fstab` - remove swap line and swap file.
+  - `lsmod | grep br_netfilter`.
   - Run:
   ```
   cat <<EOF > /etc/sysctl.d/k8s.conf
@@ -78,5 +79,5 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   10.13.13.103 vmubuntu20-node-1
   10.13.13.104 vmubuntu20-node-2
   ```
-  - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.0`.
+  - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.100`.
 
