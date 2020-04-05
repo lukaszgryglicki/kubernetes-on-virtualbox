@@ -15,6 +15,13 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   - Login as root.
   - Run: `apt update && apt upgrade`.
   - Kuberentes needs this: `swapoff -a`, `lsmod | grep br_netfilter`.
+  - Run:
+  ```
+  cat <<EOF > /etc/sysctl.d/k8s.conf
+  net.bridge.bridge-nf-call-ip6tables = 1
+  net.bridge.bridge-nf-call-iptables = 1
+  EOF
+  ```
   - `apt-get update && apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg2`.
   - `add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu eoan stable"` (no `focal` repo yet, in the future: `add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"`).
   - `apt-get update && apt-get install -y containerd.io=1.2.13-1`.
@@ -61,7 +68,9 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
     address 10.13.13.10N
     netmask 255.255.255.0
     gateway 10.13.13.100
+    post-up ip route del default via 10.13.13.100 dev enp0s8
   ```
+  - Eventually test sequence: `ip addr flush dev enp0s8; ifdown enp0s8; ifup enp0s8`.
   - Edit /etc/hosts on master and node(s), add:
   ```
   10.13.13.101 vmubuntu20-master
@@ -69,4 +78,5 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   10.13.13.103 vmubuntu20-node-1
   10.13.13.104 vmubuntu20-node-2
   ```
+  - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.0`.
 
