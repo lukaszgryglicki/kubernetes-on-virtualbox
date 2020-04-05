@@ -38,9 +38,9 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   - `curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -`.
   - Run:
   ```
-cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOF
+  cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+  deb https://apt.kubernetes.io/ kubernetes-xenial main
+  EOF
   ```
   - `apt-get update && apt-get install -y kubelet kubeadm`.
   - `sudo apt-mark hold kubelet kubeadm kubectl`.
@@ -56,16 +56,17 @@ EOF
   - `hostnamectl set-hostname vmubuntu20-node-N`.
   - `apt install net-tools ifupdown`.
   - Edit 2nd interface file (internal network) /etc/network/interfaces.d/enp0s8 (replace N with 1 for master and then 2, 3, 4 - for node(s)):
-```
-iface enp0s8 inet static
-  address 10.13.13.10N
-  netmask 255.255.255.0
-  gateway 10.13.13.100
-```
+  ```
+  iface enp0s8 inet static
+    address 10.13.13.10N
+    netmask 255.255.255.0
+    gateway 10.13.13.100
+  ```
   - Edit /etc/hosts on master and node(s), add:
-```
-10.13.13.101 vmubuntu20-master
-10.13.13.102 vmubuntu20-node-0
-10.13.13.103 vmubuntu20-node-1
-10.13.13.104 vmubuntu20-node-2
-```
+  ```
+  10.13.13.101 vmubuntu20-master
+  10.13.13.102 vmubuntu20-node-0
+  10.13.13.103 vmubuntu20-node-1
+  10.13.13.104 vmubuntu20-node-2
+  ```
+
