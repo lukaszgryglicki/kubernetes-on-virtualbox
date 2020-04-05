@@ -140,3 +140,4 @@ Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
 ```
 - Switch to `prod` context: `kubectl config use-context prod`.
 - TODO: skipping `nginx-ingress`, `metallb` and `cert-manager`. because my Mac doesn't have DNS name configured for its static IP address.
+- TODO: to be continued...
