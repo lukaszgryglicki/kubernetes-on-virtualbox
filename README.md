@@ -104,3 +104,7 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
     mput config
     ```
     - `echo 'alias k=kubectl' >> ~/.bashrc`.
+    - `k get node; service kubelet status`.
+
+You have 4-node up-to-date Kubernetes cluster running on 4 VirtualBox VMs.
+
