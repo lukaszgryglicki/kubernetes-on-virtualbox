@@ -138,6 +138,32 @@ Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
     user: kubernetes-admin
   name: shared
 ```
+- Switch to `test` context: `kubectl config use-context test`.
+- Install `nginx-ingress`: `helm install --namespace devstats-test nginx-ingress-test stable/nginx-ingress --set controller.ingressClass=nginx-test,controller.scope.namespace=devstats-test,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
 - Switch to `prod` context: `kubectl config use-context prod`.
-- TODO: skipping `nginx-ingress`, `metallb` and `cert-manager`. because my Mac doesn't have DNS name configured for its static IP address.
+- Install `nginx-ingress`: `helm install --namespace devstats-prod nginx-ingress-prod stable/nginx-ingress --set controller.ingressClass=nginx-prod,controller.scope.namespace=devstats-prod,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
+- Switch to `shared` context: `kubectl config use-context shared`.
+- Create `metallb-system` namespace: `k create ns metallb-system`.
+- Create MetalLB configuration - specify `master` IP for `test` namespace and `node-0` IP for `prod` namespace, create file `metallb-config.yaml` and apply if `k apply -f metallb-config.yaml`:
+```
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: metallb-config
+data:
+  config: |
+    address-pools:
+    - name: prod
+      protocol: layer2
+      addresses:
+      - 10.13.13.102/32
+    - name: test
+      protocol: layer2
+      addresses:
+      - 10.13.13.101/32
+```
+- Install MetalLB load balancer: `helm install --namespace metallb-system metallb stable/metallb`.
+- Check if both test and prod load balancers are OK (they shoudl have External-IP values equal to requested in config map: `kubectl -n devstats-test get svc -o wide -w nginx-ingress-test-controller; kubectl -n devstats-prod get svc -o wide -w nginx-ingress-prod-controller`.
+- TODO: skipping `cert-manager` because my iMac doesn't have DNS name configured for its static IP address.
 - TODO: to be continued...
