@@ -138,11 +138,11 @@ Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
     user: kubernetes-admin
   name: shared
 ```
-- Switch to `test` context: `kubectl config use-context test`.
+- Switch to `test` context: `k config use-context test`.
 - Install `nginx-ingress`: `helm install --namespace devstats-test nginx-ingress-test stable/nginx-ingress --set controller.ingressClass=nginx-test,controller.scope.namespace=devstats-test,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
-- Switch to `prod` context: `kubectl config use-context prod`.
+- Switch to `prod` context: `k config use-context prod`.
 - Install `nginx-ingress`: `helm install --namespace devstats-prod nginx-ingress-prod stable/nginx-ingress --set controller.ingressClass=nginx-prod,controller.scope.namespace=devstats-prod,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
-- Switch to `shared` context: `kubectl config use-context shared`.
+- Switch to `shared` context: `k config use-context shared`.
 - Create `metallb-system` namespace: `k create ns metallb-system`.
 - Create MetalLB configuration - specify `master` IP for `test` namespace and `node-0` IP for `prod` namespace, create file `metallb-config.yaml` and apply if `k apply -f metallb-config.yaml`:
 ```
@@ -164,25 +164,26 @@ data:
       - 10.13.13.101/32
 ```
 - Install MetalLB load balancer: `helm install --namespace metallb-system metallb stable/metallb`.
-- Check if both test and prod load balancers are OK (they shoudl have External-IP values equal to requested in config map: `kubectl -n devstats-test get svc -o wide -w nginx-ingress-test-controller; kubectl -n devstats-prod get svc -o wide -w nginx-ingress-prod-controller`.
+- Check if both test and prod load balancers are OK (they should have External-IP values equal to requested in config map: `k -n devstats-test get svc -o wide -w nginx-ingress-test-controller; k -n devstats-prod get svc -o wide -w nginx-ingress-prod-controller`.
 - TODO: skipping `cert-manager` because my iMac doesn't have DNS name configured for its static IP address.
-- Switch to `test` context: `kubectl config use-context test`.
+- Switch to `test` context: `k config use-context test`.
 - Clone `devstats-helm` repo: `git clone https://github.com/cncf/devstats-helm`, `cd devstats-helm`.
 - For each file in `secrets/*.secret.example` create corresponding `secrets/*.secret` file. Vim saves with end line added, truncate such files via `truncate -s -1 filename`.
 - Deploy DevStats secrets: `helm install devstats-test-secrets ./devstats-helm --set skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1`.
 - Will be deploying two small projects: KEDA and SMI.
-- Deploy storage: `helm install devstats-test-pvcs ./devstats-helm --set skipSecrets=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,indexPVsFrom=46,indexPVsTo=48,backupsPVSize=2Gi`.
+- Deploy storage: `helm install devstats-test-pvcs ./devstats-helm --set skipSecrets=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,indexPVsFrom=70,indexPVsTo=72,backupsPVSize=2Gi`.
 - Deploy "minimalistic" patroni tweaked for that tiny env: `helm install devstats-test-patroni ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,patroniRetryTimeout=120,patroniTtl=120,postgresMaxConn=16,postgresMaxParallelWorkers=2,postgresMaxReplicationSlots=2,postgresMaxTempFile=1GB,postgresMaxWalSenders=2,postgresMaxWorkerProcesses=2,postgresSharedBuffers=1280MB,postgresStorageSize=30Gi,postgresWalBuffers=64MB,postgresWalKeepSegments=5,postgresWorkMem=256MB,requestsPostgresCPU=1000m,requestsPostgresMemory=768Mi`.
-- Shell into the patroni master pod (after all 4 patroni nodes are in `Running` state: `k get po -n devstats-test | grep devstats-postgres-`): `kubectl exec -n devstats-test -it devstats-postgres-0 -- /bin/bash`:
+- Shell into the patroni master pod (after all 4 patroni nodes are in `Running` state: `k get po -n devstats-test | grep devstats-postgres-`): `k exec -n devstats-test -it devstats-postgres-0 -- /bin/bash`:
   - Run: `patronictl list` to see patroni cluster state.
   - Tweak patroni: `curl -s -XPATCH -d '{"loop_wait": "60", "postgresql": {"parameters": {"shared_buffers": "1280MB", "max_parallel_workers_per_gather": "2", "max_connections": "16", "max_wal_size": "1GB", "effective_cache_size": "1GB", "maintenance_work_mem": "256MB", "checkpoint_completion_target": "0.9", "wal_buffers": "64MB", "max_worker_processes": "2", "max_parallel_workers": "2", "temp_file_limit": "1GB", "hot_standby": "on", "wal_log_hints": "on", "wal_keep_segments": "5", "wal_level": "hot_standby", "max_wal_senders": "2", "max_replication_slots": "2"}, "use_pg_rewind": true}}' http://localhost:8008/config | jq .`.
-  - `patronictl restart devstats-postgres`.
-  - `patronictl show-config` to configm config
+  - `patronictl restart --force devstats-postgres`.
+  - `patronictl show-config` to confirm config.
 - Check patroni logs: `k logs -n devstats-test -f devstats-postgres-N`, N=0,1,2,3.
-- Install static pages handlers: `helm install devstats-test-statics ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipAPI=1,skipNamespaces=1,indexStaticsFrom=0,indexStaticsTo=1`.
+- Install static pages handlers: `helm install devstats-test-statics ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipAPI=1,skipNamespaces=1,indexStaticsFrom=0,indexStaticsTo=1,requestsStaticsCPU=50m,requestsStaticsMemory=64Mi`.
 - Install ingress: `helm install devstats-test-ingress ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipStatic=1,skipAPI=1,skipNamespaces=1,indexDomainsFrom=0,indexDomainsTo=1,ingressClass=nginx-test,sslEnv=test`.
 - Provision initial logs database and infra: `helm install devstats-test-bootstrap ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,requestsBootstrapCPU=100m,requestsBootstrapMemory=128Mi`.
-- 
+- Delete finished bootstrap pod (when in `Completed` state): `k delete po devstats-provision-bootstrap`.
+- Create backups PV(s): `helm install devstats-test-backups-pv ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,backupsPVSize=2Gi`
 
 
 - TODO: to be continued...
