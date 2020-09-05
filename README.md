@@ -72,7 +72,7 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
 - Shell to master and nodes from host via: `ssh -p 992N root@localhost`, replace N=2 for master and then N=3, 4, 5 for nodes.
 - On each (N=0, 1, 2):
   - `hostnamectl set-hostname vmubuntu20-node-N`.
-  - Configure internal network: `ifconfig enp0s8 10.13.13.10N netmask 255.255.255.0; route del default enp0s8; route add default gw 10.13.13.100 enp0s8; ifconfig enp0s8 up`.
+  - Configure internal network: `ifconfig enp0s8 10.13.13.10N netmask 255.255.255.0; route del default enp0s8; route add default gw 10.13.13.100 enp0s8; ifconfig enp0s8 up; ip route del default via 10.13.13.100 dev enp0s8`.
   - Then: `ifconfig enp0s8 | grep inet; ip r | grep enp0s8`.
   - Edit /etc/hosts on master and node(s), add:
   ```
@@ -81,7 +81,7 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   10.13.13.103 vmubuntu20-node-1
   10.13.13.104 vmubuntu20-node-2
   ```
-  - `ping vmubuntu20-master; ping vmubuntu20-node-0; ping vmubuntu20-node-1; ping vmubuntu20-node-2`.
+  - `ping wp.pl; ping vmubuntu20-master; ping vmubuntu20-node-0; ping vmubuntu20-node-1; ping vmubuntu20-node-2`.
   - Initialize cluster [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#initializing-your-control-plane-node):
   - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.101`.
   - Run on master:
@@ -95,7 +95,9 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   #!/bin/bash
   kubeadm join 10.13.13.0:1234 --token xxxxxx.yyyyyyyyyyyy --discovery-token-ca-cert-hash sha256:0123456789abcdef0
   ```
-  - On master: `wget https://docs.projectcalico.org/manifests/calico.yaml; kubectl -f calico.yaml`.
+  - Install networking plugin (calico):
+  - On master: `wget https://docs.projectcalico.org/manifests/calico.yaml; kubectl apply -f calico.yaml`.
+  - Allow scheduling on the master node [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#control-plane-node-isolation):
   - On master: `kubectl taint nodes --all node-role.kubernetes.io/master-`.
   - On master: `kubectl get po -A; kubectl get nodes`.
   - On all nodes: `./join.sh`.
