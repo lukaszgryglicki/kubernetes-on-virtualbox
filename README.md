@@ -26,7 +26,7 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   EOF
   sysctl --system
   ```
-  - Install docker, [reference](https://kubernetes.io/docs/setup/production-environment/container-runtimes/).
+  - Install docker (which uses containerd), [reference](https://kubernetes.io/docs/setup/production-environment/container-runtimes/).
   - `apt-get update && apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg2`.
   - `curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -`.
   - `add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"`.
@@ -46,38 +46,34 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   EOF
   ```
   - `mkdir -p /etc/systemd/system/docker.service.d; systemctl daemon-reload; systemctl restart docker; service docker status; service containerd status`.
-  - `` curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl ``.
+  - `systemctl enable docker`.
+  - Install kubectl [reference](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
+  - `curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"`.
   - `chmod +x ./kubectl; mv ./kubectl /usr/local/bin/kubectl; kubectl version --client; kubectl completion bash`.
+  - Install kubeadm [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#installing-kubeadm-kubelet-and-kubectl) (we will use calico network plugin, no additional setup is needed).
   - `curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -`.
   - Run:
   ```
-  cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+  cat <<EOF | tee /etc/apt/sources.list.d/kubernetes.list
   deb https://apt.kubernetes.io/ kubernetes-xenial main
   EOF
   ```
-  - `apt-get update && apt-get install -y kubelet kubeadm`.
-  - `sudo apt-mark hold kubelet kubeadm kubectl`.
+  - `apt-get update && apt-get install -y kubelet kubeadm kubectl`.
+  - `apt-mark hold kubelet kubeadm kubectl`
   - `systemctl daemon-reload; systemctl restart kubelet`.
+  - Other configuration:
   - `hostnamectl set-hostname vmubuntu20-master`.
   - `apt install -y nfs-common`.
   - `shutdown -h now`.
 - Create VBox DHCP server (run on host): `VBoxManage dhcpserver add --netname intnet --ip 10.13.13.100 --netmask 255.255.255.0 --lowerip 10.13.13.101 --upperip 10.13.13.254 --enable`.
-- Clone `master` with linked option (which will use snapshots to save host disk space). Let's call them `node-0`, `node-1`, `node-2`. VM names like `Ubuntu20-node-N`, hostnames `vmubuntu20-node-N`.
+- Clone `master` with linked option (this is on clone step 2, it will use snapshots to save host disk space). Let's call them `node-0`, `node-1`, `node-2`. VM names like `Ubuntu20-node-N`, hostnames `vmubuntu20-node-N`.
 - On each of nodes modify port forward from different port 992N --> ssh (to allow SSH access from host). `node-0`: 9923->22, `node-1`: 9924->22, `node-2`: 9925->22.
 - Stop all machines from VirtualBox GUI and then start all of them in headless mode (right click, Start -> Headless Start).
 - Shell to master and nodes from host via: `ssh -p 992N root@localhost`, replace N=2 for master and then N=3, 4, 5 for nodes.
 - On each (N=0, 1, 2):
   - `hostnamectl set-hostname vmubuntu20-node-N`.
-  - `apt install net-tools ifupdown`.
-  - Edit 2nd interface file (internal network) /etc/network/interfaces.d/enp0s8 (replace N with 1 for master and then 2, 3, 4 - for node(s)):
-  ```
-  iface enp0s8 inet static
-    address 10.13.13.10N
-    netmask 255.255.255.0
-    gateway 10.13.13.100
-    post-up ip route del default via 10.13.13.100 dev enp0s8
-  ```
-  - Eventually test sequence: `ip addr flush dev enp0s8; ifdown enp0s8; ifup enp0s8`.
+  - Configure internal network: `ifconfig enp0s8 10.13.13.10N netmask 255.255.255.0; route del default enp0s8; route add default gw 10.13.13.100 enp0s8; ifconfig enp0s8 up`.
+  - Then: `ifconfig enp0s8 | grep inet; ip r | grep enp0s8`.
   - Edit /etc/hosts on master and node(s), add:
   ```
   10.13.13.101 vmubuntu20-master
@@ -85,6 +81,8 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   10.13.13.103 vmubuntu20-node-1
   10.13.13.104 vmubuntu20-node-2
   ```
+  - `ping vmubuntu20-master; ping vmubuntu20-node-0; ping vmubuntu20-node-1; ping vmubuntu20-node-2`.
+  - Initialize cluster [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#initializing-your-control-plane-node):
   - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.101`.
   - Run on master:
   ```
