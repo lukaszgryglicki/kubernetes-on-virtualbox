@@ -119,13 +119,16 @@ You have 4-node up-to-date Kubernetes cluster running on 4 VirtualBox VMs.
 Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
 
 - Label nodes: `for node in vmubuntu20-master vmubuntu20-node-0 vmubuntu20-node-1 vmubuntu20-node-2; do k label node $node node=devstats-app; k label node $node node2=devstats-db; done`.
-- Install Helm: `wget https://get.helm.sh/helm-v3.1.2-linux-amd64.tar.gz; tar zxvf helm-v3.1.2-linux-amd64.tar.gz; mv linux-amd64/helm /usr/local/bin; rm -rf linux-amd64/ helm-v3.1.2-linux-amd64.tar.gz`.
+- Install Helm: `wget https://get.helm.sh/helm-v3.3.1-linux-amd64.tar.gz; tar zxvf helm-v3.3.1-linux-amd64.tar.gz; mv linux-amd64/helm /usr/local/bin; rm -rf linux-amd64/ helm-v3.3.1-linux-amd64.tar.gz`.
 - Add Helm charts repository: `helm repo add stable https://kubernetes-charts.storage.googleapis.com/`.
-- Install OpenEBS: `k create ns openebs; helm install --namespace openebs openebs stable/openebs --version 1.8.0; helm ls -n openebs`.
+- Add OpenEBS charts repository: `helm repo add openebs https://openebs.github.io/charts`
+- Add Ingress NGINX charts repository: `helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx`.
+- Apply Helm repos config: `helm repo update`.
+- Install OpenEBS: `k create ns openebs; helm install --namespace openebs openebs openebs/openebs; helm ls -n openebsi; kubectl get pods -n openebs`.
 - Configure default storage class (need to wait for all OpenEBS pods to be running `k get po -n openebs -w`): `k patch storageclass openebs-hostpath -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'`.
 - Install NFS provisioner (for shared NFS volumes access): `helm install local-storage-nfs stable/nfs-server-provisioner --set=persistence.enabled=true,persistence.storageClass=openebs-hostpath,persistence.size=40Gi,storageClass.name=nfs-openebs-localstorage`.
 - Create DevStats test and prod namespaces: `k create ns devstats-test; k create ns devstats-prod`.
-- Edit `/root/.kube/config` on all nodes and master, make sure you have under contexts:
+- Edit `/root/.kube/config` on all nodes and master, make sure you have this under `contexts`:
 ```
 - context:
     cluster: kubernetes
@@ -144,18 +147,23 @@ Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
   name: shared
 ```
 - Switch to `test` context: `k config use-context test`.
-- Install `nginx-ingress`: `helm install --namespace devstats-test nginx-ingress-test stable/nginx-ingress --set controller.ingressClass=nginx-test,controller.scope.namespace=devstats-test,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
+- Install `nginx-ingress`: `helm install --namespace devstats-test nginx-ingress-test ingress-nginx/ingress-nginx --set controller.ingressClass=nginx-test,controller.scope.namespace=devstats-test,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
+- Optional: edit nginx service: `k edit svc -n devstats-test nginx-ingress-test-ingress-nginx-controller` add annotation: `metallb.universe.tf/address-pool: test` and (very optional) spec: `loadBalancerIP: 10.13.13.101`.
 - Switch to `prod` context: `k config use-context prod`.
-- Install `nginx-ingress`: `helm install --namespace devstats-prod nginx-ingress-prod stable/nginx-ingress --set controller.ingressClass=nginx-prod,controller.scope.namespace=devstats-prod,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
+- Install `nginx-ingress`: `helm install --namespace devstats-prod nginx-ingress-prod ingress-nginx/ingress-nginx --set controller.ingressClass=nginx-prod,controller.scope.namespace=devstats-prod,defaultBackend.enabled=false,controller.livenessProbe.initialDelaySeconds=60,controller.livenessProbe.periodSeconds=40,controller.livenessProbe.timeoutSeconds=20,controller.livenessProbe.successThreshold=1,controller.livenessProbe.failureThreshold=5,controller.readinessProbe.initialDelaySeconds=60,controller.readinessProbe.periodSeconds=40,controller.readinessProbe.timeoutSeconds=20,controller.readinessProbe.successThreshold=1,controller.readinessProbe.failureThreshold=5`.
+- Optional: edit nginx service: `k edit svc -n devstats-prod nginx-ingress-prod-ingress-nginx-controller` add annotation: `metallb.universe.tf/address-pool: prod` and (very optional) spec `loadBalancerIP: 10.13.13.102`.
 - Switch to `shared` context: `k config use-context shared`.
-- Create `metallb-system` namespace: `k create ns metallb-system`.
+- Install MetalLB [reference](https://metallb.universe.tf/installation/#installation-by-manifest):
+- `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml`.
+- `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml`.
+- `kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"`.
 - Create MetalLB configuration - specify `master` IP for `test` namespace and `node-0` IP for `prod` namespace, create file `metallb-config.yaml` and apply if `k apply -f metallb-config.yaml`:
 ```
 apiVersion: v1
 kind: ConfigMap
 metadata:
   namespace: metallb-system
-  name: metallb-config
+  name: config
 data:
   config: |
     address-pools:
@@ -168,8 +176,10 @@ data:
       addresses:
       - 10.13.13.101/32
 ```
-- Install MetalLB load balancer: `helm install --namespace metallb-system metallb stable/metallb`.
-- Check if both test and prod load balancers are OK (they should have External-IP values equal to requested in config map: `k -n devstats-test get svc -o wide -w nginx-ingress-test-controller; k -n devstats-prod get svc -o wide -w nginx-ingress-prod-controller`.
+- More details [here](https://raw.githubusercontent.com/google/metallb/v0.9.3/manifests/example-config.yaml).
+- Check if both test and prod load balancers are OK (they should have External-IP values equal to requested in config map: `k -n devstats-test get svc -o wide -w nginx-ingress-test-ingress-nginx-controller; k -n devstats-prod get svc -o wide -w nginx-ingress-prod-ingress-nginx-controller`).
+- Note: Helm chart for metalLB is currently broken, see details in `MLB_HELM.md`.
+
 - TODO: skipping `cert-manager` because my iMac doesn't have DNS name configured for its static IP address.
 - Switch to `test` context: `k config use-context test`.
 - Clone `devstats-helm` repo: `git clone https://github.com/cncf/devstats-helm`, `cd devstats-helm`.
