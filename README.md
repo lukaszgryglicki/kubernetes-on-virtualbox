@@ -10,23 +10,28 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
 - Configure 1st network adapter: NAT. Configure port forwarding from guest `22` to host `9922` (SSH access).
 - Configure 2nd network adapter: internal network 'intnet'.
 - Install Ubuntu20, then docker, kubectl, kubeadm:
+  - Reference [Installing kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/).
   - As user configured on setup, configure root password: `sudo passwd root` - first put your user password then root password twice.
   - Enable root login `vim /etc/ssh/sshd_config` add line `PermitRootLogin yes`, then `sudo service sshd restart`.
-  - Login as root.
+  - Optional: ACPI shutown VirtualBox UI, once done, start it in headless mode: `VBoxHeadless --startvm Ubuntu20-master`, wait a bit and then `ssh -p9922 root@localhost`.
+  - Or: Login as root.
   - Run: `apt update && apt upgrade`.
   - Kuberentes needs this: `swapoff -a`, `vim /etc/fstab` - remove swap line and swap file.
   - `lsmod | grep br_netfilter`.
   - Run:
   ```
-  cat <<EOF > /etc/sysctl.d/k8s.conf
+  cat <<EOF | tee /etc/sysctl.d/k8s.conf
   net.bridge.bridge-nf-call-ip6tables = 1
   net.bridge.bridge-nf-call-iptables = 1
   EOF
+  sysctl --system
   ```
+  - Install docker, [reference](https://kubernetes.io/docs/setup/production-environment/container-runtimes/).
   - `apt-get update && apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg2`.
-  - `add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu eoan stable"` (no `focal` repo yet, in the future: `add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"`).
-  - `apt-get update && apt-get install -y containerd.io=1.2.13-1`.
-  - `apt-get install -y docker-ce=5:19.03.8~3-0~ubuntu-eoan && apt-get install -y docker-ce-cli=5:19.03.8~3-0~ubuntu-eoan && docker version`.
+  - `curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -`.
+  - `add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"`.
+  - `apt-get update && apt-get install -y containerd.io=1.2.13-2`
+  - `apt-get install -y docker-ce=5:19.03.11~3-0~ubuntu-$(lsb_release -cs) docker-ce-cli=5:19.03.11~3-0~ubuntu-$(lsb_release -cs)`.
   - Run:
   ```
   cat > /etc/docker/daemon.json <<EOF
