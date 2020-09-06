@@ -114,6 +114,10 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
 
 You have 4-node up-to-date Kubernetes cluster running on 4 VirtualBox VMs.
 
+# Restarting
+
+If you restart VMs you may need to reapply ifconfigs and do `service kubelet restart`.
+
 # DevStats
 
 Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
@@ -179,7 +183,6 @@ data:
 - More details [here](https://raw.githubusercontent.com/google/metallb/v0.9.3/manifests/example-config.yaml).
 - Check if both test and prod load balancers are OK (they should have External-IP values equal to requested in config map: `k -n devstats-test get svc -o wide -w nginx-ingress-test-ingress-nginx-controller; k -n devstats-prod get svc -o wide -w nginx-ingress-prod-ingress-nginx-controller`).
 - Note: Helm chart for metalLB is currently broken, see details in `MLB_HELM.md`.
-
 - TODO: skipping `cert-manager` because my iMac doesn't have DNS name configured for its static IP address.
 - Switch to `test` context: `k config use-context test`.
 - Clone `devstats-helm` repo: `git clone https://github.com/cncf/devstats-helm`, `cd devstats-helm`.
@@ -187,7 +190,7 @@ data:
 - Deploy DevStats secrets: `helm install devstats-test-secrets ./devstats-helm --set skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1`.
 - Will be deploying two small projects: KEDA and SMI.
 - Deploy storage: `helm install devstats-test-pvcs ./devstats-helm --set skipSecrets=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,indexPVsFrom=70,indexPVsTo=72,backupsPVSize=2Gi`.
-- Deploy "minimalistic" patroni tweaked for that tiny env: `helm install devstats-test-patroni ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,patroniRetryTimeout=120,patroniTtl=120,postgresMaxConn=16,postgresMaxParallelWorkers=2,postgresMaxReplicationSlots=2,postgresMaxTempFile=1GB,postgresMaxWalSenders=2,postgresMaxWorkerProcesses=2,postgresSharedBuffers=1280MB,postgresStorageSize=30Gi,postgresWalBuffers=64MB,postgresWalKeepSegments=5,postgresWorkMem=256MB,requestsPostgresCPU=1000m,requestsPostgresMemory=768Mi`.
+- Deploy "minimalistic" patroni tweaked for that tiny env: `helm install devstats-test-patroni ./devstats-helm --set skipSecrets=1,skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,patroniRetryTimeout=120,patroniTtl=120,postgresMaxConn=16,postgresMaxParallelWorkers=2,postgresMaxReplicationSlots=2,postgresMaxTempFile=1GB,postgresMaxWalSenders=2,postgresMaxWorkerProcesses=2,postgresSharedBuffers=1280MB,postgresStorageSize=30Gi,postgresWalBuffers=64MB,postgresWalKeepSegments=5,postgresWorkMem=256MB,requestsPostgresCPU=400m,requestsPostgresMemory=512Mi`.
 - Shell into the patroni master pod (after all 4 patroni nodes are in `Running` state: `k get po -n devstats-test | grep devstats-postgres-`): `k exec -n devstats-test -it devstats-postgres-0 -- /bin/bash`:
   - Run: `patronictl list` to see patroni cluster state.
   - Tweak patroni: `curl -s -XPATCH -d '{"loop_wait": "60", "postgresql": {"parameters": {"shared_buffers": "1280MB", "max_parallel_workers_per_gather": "2", "max_connections": "16", "max_wal_size": "1GB", "effective_cache_size": "1GB", "maintenance_work_mem": "256MB", "checkpoint_completion_target": "0.9", "wal_buffers": "64MB", "max_worker_processes": "2", "max_parallel_workers": "2", "temp_file_limit": "1GB", "hot_standby": "on", "wal_log_hints": "on", "wal_keep_segments": "5", "wal_level": "hot_standby", "max_wal_senders": "2", "max_replication_slots": "2"}, "use_pg_rewind": true}}' http://localhost:8008/config | jq .`.
