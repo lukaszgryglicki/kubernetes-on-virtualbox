@@ -1,12 +1,12 @@
 # kubernetes-on-virtualbox
 
-Run Kubernetes (4 node cluster) on a local VirtualBox
+Run Kubernetes (4 node cluster) on a local VirtualBox. Currently tested with Kubernetes v1.20.0.
 
 
 # Setup
 
 - Create an Ubuntu 20.04 LTS machine with >= 2G RAM and >= 2 CPU, dynamically sized VDI disk at least 40G.
-- Call that installation `master` (VirtualBox name can be `Ubuntu20-mater`), hostname used here: `vmubuntu20-master`.
+- Call that installation `master` (VirtualBox name can be `Ubuntu20-master`), hostname used here: `vmubuntu20-master`.
 - Configure 1st network adapter: NAT. Configure port forwarding from guest `22` to host `9922` (SSH access).
 - Configure 2nd network adapter: internal network 'intnet'.
 - Install Ubuntu20, then docker, kubectl, kubeadm:
@@ -116,6 +116,7 @@ EOF
 - On each (N=0, 1, 2):
   - `hostnamectl set-hostname vmubuntu20-node-N`.
   - Configure internal network (N=1,2,3,4): `ifconfig enp0s8 10.13.13.10N netmask 255.255.255.0; route del default enp0s8; route add default gw 10.13.13.100 enp0s8; ifconfig enp0s8 up; ip route del default via 10.13.13.100 dev enp0s8`.
+  - save this as `net.sh`.
   - Then: `ifconfig enp0s8 | grep inet; ip r | grep enp0s8`.
   - `ping google.com; ping vmubuntu20-master; ping vmubuntu20-node-0; ping vmubuntu20-node-1; ping vmubuntu20-node-2`.
   - Initialize cluster [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#initializing-your-control-plane-node):
@@ -159,16 +160,16 @@ If you restart VMs you may need to reapply ifconfigs and do `service kubelet res
 Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
 
 - Label nodes: `for node in vmubuntu20-master vmubuntu20-node-0 vmubuntu20-node-1 vmubuntu20-node-2; do k label node $node node=devstats-app; k label node $node node2=devstats-db; done`.
-- Install Helm: `wget https://get.helm.sh/helm-v3.3.1-linux-amd64.tar.gz; tar zxvf helm-v3.3.1-linux-amd64.tar.gz; mv linux-amd64/helm /usr/local/bin; rm -rf linux-amd64/ helm-v3.3.1-linux-amd64.tar.gz`.
-- Add Helm charts repository: `helm repo add stable https://kubernetes-charts.storage.googleapis.com/`.
-- Add OpenEBS charts repository: `helm repo add openebs https://openebs.github.io/charts`
-- Add Ingress NGINX charts repository: `helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx`.
-- Apply Helm repos config: `helm repo update`.
-- Install OpenEBS: `k create ns openebs; helm install --namespace openebs openebs openebs/openebs; helm ls -n openebsi; kubectl get pods -n openebs`.
+- Install Helm (master & nodes): `wget https://get.helm.sh/helm-v3.4.2-linux-amd64.tar.gz; tar zxvf helm-v3.4.2-linux-amd64.tar.gz; mv linux-amd64/helm /usr/local/bin; rm -rf linux-amd64/ helm-v3.4.2-linux-amd64.tar.gz`.
+- Add Helm charts repository (master & nodes): `helm repo add stable https://charts.helm.sh/stable`.
+- Add OpenEBS charts repository (master & nodes): `helm repo add openebs https://openebs.github.io/charts`
+- Add Ingress NGINX charts repository (master & nodes): `helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx`.
+- Apply Helm repos config (master & nodes): `helm repo update`.
+- Install OpenEBS: `k create ns openebs; helm install --namespace openebs openebs openebs/openebs; helm ls -n openebs; kubectl get pods -n openebs`.
 - Configure default storage class (need to wait for all OpenEBS pods to be running `k get po -n openebs -w`): `k patch storageclass openebs-hostpath -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'`.
 - Install NFS provisioner (for shared NFS volumes access): `helm install local-storage-nfs stable/nfs-server-provisioner --set=persistence.enabled=true,persistence.storageClass=openebs-hostpath,persistence.size=40Gi,storageClass.name=nfs-openebs-localstorage`.
 - Create DevStats test and prod namespaces: `k create ns devstats-test; k create ns devstats-prod`.
-- Edit `/root/.kube/config` on all nodes and master, make sure you have this under `contexts`:
+- Edit `vim /root/.kube/config` on all nodes and master, make sure you have this under `contexts`:
 ```
 - context:
     cluster: kubernetes
@@ -194,10 +195,10 @@ Installing [DevStats](https://github.com/cncf/devstats-helm) on this cluster:
 - Optional: edit nginx service: `k edit svc -n devstats-prod nginx-ingress-prod-ingress-nginx-controller` add annotation: `metallb.universe.tf/address-pool: prod` and (very optional) spec `loadBalancerIP: 10.13.13.102`.
 - Switch to `shared` context: `k config use-context shared`.
 - Install MetalLB [reference](https://metallb.universe.tf/installation/#installation-by-manifest):
-- `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml`.
-- `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml`.
+- `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.5/manifests/namespace.yaml`.
+- `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.5/manifests/metallb.yaml`.
 - `kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"`.
-- Create MetalLB configuration - specify `master` IP for `test` namespace and `node-0` IP for `prod` namespace, create file `metallb-config.yaml` and apply if `k apply -f metallb-config.yaml`:
+- Create MetalLB configuration - specify `master` IP for `test` and `node-0` IP for `prod`, create file `metallb-config.yaml` and apply if `k apply -f metallb-config.yaml`:
 ```
 apiVersion: v1
 kind: ConfigMap
@@ -216,13 +217,13 @@ data:
       addresses:
       - 10.13.13.101/32
 ```
-- More details [here](https://raw.githubusercontent.com/google/metallb/v0.9.3/manifests/example-config.yaml).
+- More details [here](https://raw.githubusercontent.com/google/metallb/v0.9.5/manifests/example-config.yaml).
 - Check if both test and prod load balancers are OK (they should have External-IP values equal to requested in config map: `k -n devstats-test get svc -o wide -w nginx-ingress-test-ingress-nginx-controller; k -n devstats-prod get svc -o wide -w nginx-ingress-prod-ingress-nginx-controller`).
 - Note: Helm chart for metalLB is currently broken, see details in `MLB_HELM.md`.
 - TODO: skipping `cert-manager` because my iMac doesn't have DNS name configured for its static IP address.
 - Switch to `test` context: `k config use-context test`.
 - Clone `devstats-helm` repo: `git clone https://github.com/cncf/devstats-helm`, `cd devstats-helm`.
-- For each file in `secrets/*.secret.example` create corresponding `secrets/*.secret` file. Vim saves with end line added, truncate such files via `truncate -s -1 filename`.
+- For each file in `devstats-helm/secrets/*.secret.example` create corresponding `secrets/*.secret` file. Vim saves with end line added, truncate such files via `truncate -s -1 filename`.
 - Deploy DevStats secrets: `helm install devstats-test-secrets ./devstats-helm --set skipPVs=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1`.
 - Will be deploying two small projects: KEDA and SMI.
 - Deploy storage: `helm install devstats-test-pvcs ./devstats-helm --set skipSecrets=1,skipBackupsPV=1,skipVacuum=1,skipBackups=1,skipBootstrap=1,skipProvisions=1,skipCrons=1,skipAffiliations=1,skipGrafanas=1,skipServices=1,skipPostgres=1,skipIngress=1,skipStatic=1,skipAPI=1,skipNamespaces=1,indexPVsFrom=70,indexPVsTo=72,backupsPVSize=2Gi`.
