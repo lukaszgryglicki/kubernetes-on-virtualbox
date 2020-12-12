@@ -17,78 +17,114 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   - Or: Login as root.
   - Run: `apt update && apt upgrade`.
   - Kuberentes needs this: `swapoff -a`, `vim /etc/fstab` - remove swap line and swap file.
-  - `lsmod | grep br_netfilter`.
+  - `lsmod | grep br_netfilter`. If not loaded then `modprobe br_netfilter`.
   - Run:
   ```
-  cat <<EOF | tee /etc/sysctl.d/k8s.conf
-  net.bridge.bridge-nf-call-ip6tables = 1
-  net.bridge.bridge-nf-call-iptables = 1
-  EOF
-  sysctl --system
+cat <<EOF | tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
   ```
-  - Install docker (which uses containerd), [reference](https://kubernetes.io/docs/setup/production-environment/container-runtimes/).
-  - `apt-get update && apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg2`.
-  - `curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -`.
-  - `add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"`.
-  - `apt-get update && apt-get install -y containerd.io=1.2.13-2`
-  - `apt-get install -y docker-ce=5:19.03.11~3-0~ubuntu-$(lsb_release -cs) docker-ce-cli=5:19.03.11~3-0~ubuntu-$(lsb_release -cs)`.
+  - `sysctl --system`.
+  - Install containerd (this is now a recommended Kubernetes CRI instead of docker).
   - Run:
   ```
-  cat > /etc/docker/daemon.json <<EOF
-  {
-    "exec-opts": ["native.cgroupdriver=systemd"],
-    "log-driver": "json-file",
-    "log-opts": {
-      "max-size": "100m"
-    },
-    "storage-driver": "overlay2"
-  }
-  EOF
+cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+EOF
   ```
-  - `mkdir -p /etc/systemd/system/docker.service.d; systemctl daemon-reload; systemctl restart docker; service docker status; service containerd status`.
-  - `systemctl enable docker`.
+  - `sudo modprobe overlay; sudo modprobe br_netfilter`.
+  - Run:
+  ```
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+  ```
+  - `sudo sysctl --system`.
+  - `sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common`.
+  - `curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key --keyring /etc/apt/trusted.gpg.d/docker.gpg add -`.
+  - `sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"`.
+  - `sudo apt-get update && sudo apt-get install -y containerd.io`.
+  - `sudo mkdir -p /etc/containerd`.
+  - `sudo containerd config default | sudo tee /etc/containerd/config.toml`.
+  - `sudo systemctl restart containerd`.
+  - `sudo systemctl enable containerd`.
+  - Optional but highly recommended - set cgroup driver to systemd.
+  - `vim /etc/containerd/config.toml`, search: `/plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options`.
+  - Add: `SystemdCgroup = true`, so it looks like:
+  ```
+          base_runtime_spec = ""
+          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+            SystemdCgroup = true
+    [plugins."io.containerd.grpc.v1.cri".cni]
+  ```
+  - `service containerd restart`.
   - Install kubectl [reference](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
   - `curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"`.
   - `chmod +x ./kubectl; mv ./kubectl /usr/local/bin/kubectl; kubectl version --client; kubectl completion bash`.
+  - `vim ~/.bashrc`, uncomment `. /etc/bash_completion` part, relogin, `echo 'source <(kubectl completion bash)' >>~/.bashrc`, `kubectl completion bash >/etc/bash_completion.d/kubectl`.
+  - `echo 'alias k=kubectl' >>~/.bashrc; echo 'complete -F __start_kubectl k' >>~/.bashrc`.
   - Install kubeadm [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#installing-kubeadm-kubelet-and-kubectl) (we will use calico network plugin, no additional setup is needed).
   - `curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -`.
   - Run:
   ```
-  cat <<EOF | tee /etc/apt/sources.list.d/kubernetes.list
-  deb https://apt.kubernetes.io/ kubernetes-xenial main
-  EOF
+cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
   ```
   - `apt-get update && apt-get install -y kubelet kubeadm kubectl`.
   - `apt-mark hold kubelet kubeadm kubectl`
   - `systemctl daemon-reload; systemctl restart kubelet`.
+  - Configure the cgroup driver for kubeadm using containerd:
+  ```
+cat <<EOF | sudo tee /etc/kubeadm_cgroup_driver.yml
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: 10.13.13.101
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+networking:
+  podSubnet: '192.168.0.0/16'
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+EOF
+  ```
   - Other configuration:
   - `hostnamectl set-hostname vmubuntu20-master`.
-  - `apt install -y nfs-common`.
+  - `apt install -y nfs-common net-tools`.
+  - Edit `/etc/hosts` add:
+  ```
+10.13.13.101 vmubuntu20-master
+10.13.13.102 vmubuntu20-node-0
+10.13.13.103 vmubuntu20-node-1
+10.13.13.104 vmubuntu20-node-2
+  ```
   - `shutdown -h now`.
 - Create VBox DHCP server (run on host): `VBoxManage dhcpserver add --netname intnet --ip 10.13.13.100 --netmask 255.255.255.0 --lowerip 10.13.13.101 --upperip 10.13.13.254 --enable`.
+- Or modify existing: `VBoxManage dhcpserver modify --netname intnet --ip 10.13.13.100 --netmask 255.255.255.0 --lowerip 10.13.13.101 --upperip 10.13.13.254 --enable`.
 - Clone `master` with linked option (this is on clone step 2, it will use snapshots to save host disk space). Let's call them `node-0`, `node-1`, `node-2`. VM names like `Ubuntu20-node-N`, hostnames `vmubuntu20-node-N`.
 - On each of nodes modify port forward from different port 992N --> ssh (to allow SSH access from host). `node-0`: 9923->22, `node-1`: 9924->22, `node-2`: 9925->22.
 - Stop all machines from VirtualBox GUI and then start all of them in headless mode (right click, Start -> Headless Start).
 - Shell to master and nodes from host via: `ssh -p 992N root@localhost`, replace N=2 for master and then N=3, 4, 5 for nodes.
 - On each (N=0, 1, 2):
   - `hostnamectl set-hostname vmubuntu20-node-N`.
-  - Configure internal network: `ifconfig enp0s8 10.13.13.10N netmask 255.255.255.0; route del default enp0s8; route add default gw 10.13.13.100 enp0s8; ifconfig enp0s8 up; ip route del default via 10.13.13.100 dev enp0s8`.
+  - Configure internal network (N=1,2,3,4): `ifconfig enp0s8 10.13.13.10N netmask 255.255.255.0; route del default enp0s8; route add default gw 10.13.13.100 enp0s8; ifconfig enp0s8 up; ip route del default via 10.13.13.100 dev enp0s8`.
   - Then: `ifconfig enp0s8 | grep inet; ip r | grep enp0s8`.
-  - Edit /etc/hosts on master and node(s), add:
-  ```
-  10.13.13.101 vmubuntu20-master
-  10.13.13.102 vmubuntu20-node-0
-  10.13.13.103 vmubuntu20-node-1
-  10.13.13.104 vmubuntu20-node-2
-  ```
-  - `ping wp.pl; ping vmubuntu20-master; ping vmubuntu20-node-0; ping vmubuntu20-node-1; ping vmubuntu20-node-2`.
+  - `ping google.com; ping vmubuntu20-master; ping vmubuntu20-node-0; ping vmubuntu20-node-1; ping vmubuntu20-node-2`.
   - Initialize cluster [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#initializing-your-control-plane-node):
-  - Run on master: `kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=10.13.13.101`.
+  - Run on master: `kubeadm init --config /etc/kubeadm_cgroup_driver.yml`.
   - Run on master:
   ```
-  mkdir -p $HOME/.kube
-  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
   ```
   - Save kubeadm join command output to `join.sh` on master and all nodes, something like then `chmod +x join.sh`:
   ```
@@ -99,15 +135,15 @@ Run Kubernetes (4 node cluster) on a local VirtualBox
   - On master: `wget https://docs.projectcalico.org/manifests/calico.yaml; kubectl apply -f calico.yaml`.
   - Allow scheduling on the master node [reference](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#control-plane-node-isolation):
   - On master: `kubectl taint nodes --all node-role.kubernetes.io/master-`.
-  - On master: `kubectl get po -A; kubectl get nodes`.
+  - On master: `kubectl get po -A; kubectl get nodes`. wait for all pods to be in `Running` state.
   - On all nodes: `./join.sh`.
   - Copy config from master to all nodes:
     - `sftp root@vmubuntu20-node-N`.
     ```
-    mkdir .kube
-    lcd .kube
-    cd .kube
-    mput config
+mkdir .kube
+lcd .kube
+cd .kube
+mput config
     ```
     - `echo 'alias k=kubectl' >> ~/.bashrc`.
     - `k get node; service kubelet status`.
