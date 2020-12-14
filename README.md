@@ -139,14 +139,14 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
   - On master: `kubectl get po -A; kubectl get nodes`. wait for all pods to be in `Running` state.
   - On all nodes: `./join.sh`.
   - Copy config from master to all nodes:
-    - `sftp root@vmubuntu20-node-N`.
+  - `sftp root@vmubuntu20-node-N`:
 ```
 mkdir .kube
 lcd .kube
 cd .kube
 mput config
 ```
-    - `k get node; service kubelet status`.
+  - `k get node; service kubelet status`.
 
 You have 4-node up-to-date Kubernetes cluster running on 4 VirtualBox VMs.
 
