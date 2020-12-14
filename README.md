@@ -19,12 +19,12 @@ Run Kubernetes (4 node cluster) on a local VirtualBox. Currently tested with Kub
   - Kuberentes needs this: `swapoff -a`, `vim /etc/fstab` - remove swap line and swap file.
   - `lsmod | grep br_netfilter`. If not loaded then `modprobe br_netfilter`.
   - Run:
-  ```
+```
 cat <<EOF | tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 EOF
-  ```
+```
   - `sysctl --system`.
   - Install containerd (this is now a recommended Kubernetes CRI instead of docker).
   - Run:
