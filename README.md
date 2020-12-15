@@ -9,7 +9,7 @@ Run Kubernetes (4 node cluster) on a local VirtualBox. Currently tested with Kub
 - Call that installation `master` (VirtualBox name can be `Ubuntu20-master`), hostname used here: `vmubuntu20-master`.
 - Configure 1st network adapter: NAT. Configure port forwarding from guest `22` to host `9922` (SSH access).
 - Configure 2nd network adapter: internal network 'intnet'.
-- Install Ubuntu20, then docker, kubectl, kubeadm:
+- Install Ubuntu 20.04 LTS, then containerd, kubectl, kubeadm:
   - Reference [Installing kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/).
   - As user configured on setup, configure root password: `sudo passwd root` - first put your user password then root password twice.
   - Enable root login `vim /etc/ssh/sshd_config` add line `PermitRootLogin yes`, then `sudo service sshd restart`.
